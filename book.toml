@@ -1,0 +1,6 @@
+[book]
+authors = ["Benito Anagua"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Ayni Collective"
