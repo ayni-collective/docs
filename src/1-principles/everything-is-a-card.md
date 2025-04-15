@@ -1,167 +1,194 @@
-# **Principle 3: The "Everything is a Card" Paradigm**
+# Everything is a Card: Unified Interface System
 
-**"A unified interface model where all components—apps, widgets, and content—exist as autonomous, interactive cards following declarative rules and physical interaction metaphors."**
+**Core Principle**:  
+_"All interface elements exist as autonomous, interactive cards following consistent physical metaphors and declarative behavior rules."_
 
----
+## 1. Core Architecture
 
-## **1. Core Architecture**
-
-### **Card Anatomy (Rust Implementation)**
+### Card Type System
 
 ```rust
-#[derive(State)]
+#[derive(State, Serialize, Deserialize)]
 pub struct Card {
     pub id: Uuid,
-    pub content: CardContent,  // Enum: App, Media, Widget, Notification
-    pub behavior: CardBehavior, // Drag, Flip, Stack permissions
+    pub content_type: CardContent,  // App, Media, Widget, Terminal
+    pub behavior: CardBehavior,     // Drag, Stack, Flip permissions
     #[observed]
-    pub state: CardState,      // Focused/Minimized/Active
-    #[observed]
-    pub style: CardStyle,      // Inherits system theme + overrides
+    pub state: CardState,          // Active/Focused/Minimized
+    #[serde(skip)]
+    pub renderer: CardRenderer,
 }
 ```
 
-### **Key Properties**
-
-- **Atomic**: Each card contains its own logic and presentation
-- **Context-Aware**: Adapts behavior based on container/location
-- **Physical Metaphors**: Flip, stack, shuffle interactions
-
----
-
-## **2. Container System (Decks)**
-
-| Type      | Behavior              | Use Case                | Kanban Equivalent |
-| --------- | --------------------- | ----------------------- | ----------------- |
-| **Stack** | Manual Z-ordering     | Window management       | N/A               |
-| **Grid**  | Automated tiling      | Workspaces              | Swimlanes         |
-| **Flow**  | Directional scrolling | App docks/notifications | Backlog           |
-| **Board** | Column-based grouping | Task management         | Kanban Board      |
+### Content Variants
 
 ```rust
-struct KanbanBoard {
-    lanes: HashMap<LaneId, Lane>,  // "To Do", "In Progress", "Done"
-    #[observed]
-    cards: Vec<Card>,
-    sorting: LaneRules,  // Auto-sort by priority/tags/deadline
+enum CardContent {
+    App(AppDescriptor),
+    Media(MediaMetadata),
+    Terminal(TerminalSession),
+    Widget(WidgetManifest),
+    Container(CardGroup),
 }
 ```
 
----
+## 2. Interaction Model
 
-## **3. Physical Interaction Model**
+### Gesture Mapping
 
-### **Card Gestures**
+| Physical Metaphor | Digital Implementation | Resulting Behavior |
+| ----------------- | ---------------------- | ------------------ |
+| **Flip**          | Middle-click           | Shows back panel   |
+| **Stack**         | Drag + hover           | Creates card group |
+| **Shuffle**       | Ctrl+Alt+Arrow Keys    | Rearranges layout  |
+| **Deal**          | Super+Number           | Distributes cards  |
 
-| Physical Action | Digital Implementation          | UX Purpose               |
-| --------------- | ------------------------------- | ------------------------ |
-| **Deal**        | Distribute cards across decks   | Workspace initialization |
-| **Shuffle**     | Algorithmic reorganization      | Context switching        |
-| **Flip**        | Show back panel (settings/logs) | Quick access             |
-| **Stack**       | Temporary group creation        | Task batching            |
-| **Fan**         | Peek at overlapping cards       | Content preview          |
-
-### **Wayland Protocol Extension**
+### Wayland Protocol Extension
 
 ```xml
-<interface name="zcard_gesture_v1">
-    <method name="FlipCard">
-        <arg name="card_id" type="string"/>
+<interface name="zcard_management_v1">
+    <method name="CreateCard">
+        <arg name="descriptor" type="s" direction="in"/>
     </method>
-    <event name="StackRequest">
-        <arg name="cards" type="array" content_type="string"/>
+    <event name="CardTransformed">
+        <arg name="card_id" type="s"/>
+        <arg name="transformation" type="u"/>
     </event>
 </interface>
 ```
 
----
+## 3. Layout System
 
-## **4. Adaptive Layout Engine**
-
-### **Declarative Rules**
+### Declarative Arrangement
 
 ```rust
-fn arrange_cards(layout: LayoutType, cards: &[Card]) -> Vec<CardGroup> {
-    match layout {
-        LayoutType::Kanban => group_by_lanes(cards),
-        LayoutType::Grid => {
-            let grid = GridLayout::new()
-                .with_columns(auto_detect_columns())
-                .with_gutter(16);
-            grid.arrange(cards)
-        }
-        // Other layouts...
-    }
+trait CardLayout {
+    fn arrange(&self, cards: &[Card]) -> Vec<CardGroup>;
+}
+
+struct GridLayout {
+    columns: usize,
+    gutter_size: f32,
+    aspect_ratio: Option<f32>,
+}
+
+struct KanbanLayout {
+    lanes: Vec<LaneDefinition>,
+    sorting: LaneSorting,
 }
 ```
 
-### **Performance Optimization**
+### Performance Optimization
 
-- **Partial Updates**: Only reflow affected card groups
-- **GPU-Accelerated**: Shared shaders for common card types
-- **Lazy Loading**: Offscreen cards remain suspended
-
----
-
-## **5. Theming System Integration**
-
-### **Priority-Based Styling**
-
-```ron
-CardThemeProfile(
-    default: ("daylight", 6500K),
-    exceptions: [
-        ("Video", (night: 3500K, brightness: -20%)),
-        ("Critical", (accent: "#ff3e00", blink: 2Hz))
-    ],
-    containers: [
-        ("Kanban", (lane_borders: true)),
-        ("Grid", (drop_shadows: false))
-    ]
-)
+```mermaid
+graph LR
+    A[Card Change] --> B{Dirty?}
+    B -->|Yes| C[Partial Reflow]
+    B -->|No| D[No Action]
+    C --> E[GPU Render List]
+    E --> F[Compositor]
 ```
 
-### **State-Aware Appearance**
+## 4. Theming Integration
+
+[Related: Adaptive Theming](../principles/adaptive-theming.md)
+
+### Card-Specific Rules
+
+```ron
+card_themes: {
+    "default": (radius: 8px, shadow: "small"),
+    "media": (radius: 0px, shadow: "none"),
+    "terminal": (background: "dark", border: "accent"),
+}
+```
+
+### State Visual Feedback
 
 ```glsl
 // Card fragment shader
-uniform int uCardState; // Focused/Minimized/Default
+uniform int uCardState;
 
 vec4 render_card() {
-    if (uCardState == FOCUSED) {
-        return apply_highlight(rgba);
+    if (uCardState == CARD_FOCUSED) {
+        return apply_highlight(color);
     }
-    // Default rendering...
+    if (uCardState == CARD_DRAGGING) {
+        return apply_dragging_effect(color);
+    }
+    return color;
 }
 ```
 
----
+## 5. System Integration Points
 
-## **6. Advantages Over Traditional Models**
+### Terminal Cards
 
-| Aspect            | Card Paradigm             | Traditional Windows      |
-| ----------------- | ------------------------- | ------------------------ |
-| **Consistency**   | Unified interaction model | Varies by app/widget     |
-| **Flexibility**   | Dynamic reorganization    | Manual window management |
-| **Performance**   | Isolated card rendering   | Global repaints          |
-| **Accessibility** | Predictable gestures      | Inconsistent controls    |
+[Related: Terminal-First Desktop](../principles/terminal-first-desktop.md)
 
----
+```fish
+function card_prompt
+    echo "[$(pwd)]" | desk card update term-$PID --title="Terminal"
+end
+```
 
-## **Next Implementation Steps**
+### Window Manager Bridge
 
-1. **Core Protocols**
+```rust
+struct WindowCard {
+    wayland_surface: WaylandSurface,
+    card_metadata: Card,
+    last_activity: Instant,
+}
+```
 
-   - Wayland extensions for card drag/drop
-   - DBus API for deck management
+## Advantages Over Traditional Models
 
-2. **Animation System**
+1. **Consistent Interaction**:
 
-   - Physics-based card movements
-   - Transition curves for flipping/stacking
+   ```rust
+   // Unified handling for all card types
+   fn handle_click(card: &mut Card) {
+       match card.content_type {
+           ContentType::App => launch_app(card),
+           ContentType::Terminal => focus_terminal(card),
+           _ => default_click(card)
+       }
+   }
+   ```
 
-3. **Developer Tools**
-   - Card debug overlay
-   - Layout boundary visualizer
+2. **Performance Benefits**:
 
-Would you like to prioritize any of these areas for deeper technical exploration?
+   - Isolated rendering per card
+   - Differential updates
+   - GPU-accelerated transformations
+
+3. **Developer Experience**:
+   ```bash
+   # Card debug console
+   desk card inspect <card-id> --format=json
+   ```
+
+## Cross-References
+
+- [Declarative Shell](../principles/declarative-shell.md)
+- [Window Manager](../components/window-manager.md)
+- [Rust API](../api/rust-api.md)
+
+## Roadmap
+
+1. **Core Features**:
+
+   - Complete gesture support
+   - Cross-card drag/drop
+
+2. **Optimizations**:
+
+   - Vulkan render backend
+   - Damage region tracking
+
+3. **Tooling**:
+   - Card visual editor
+   - Layout debugger
+
+This card system provides a unified, physically-inspired interaction model across all desktop elements while maintaining high performance and developer flexibility.

@@ -1,175 +1,175 @@
-# Adaptive Theme Engine: Environment-Aware Color Management
+# Adaptive Theming System
 
-## Core Architecture Principle
+**Core Principle**:  
+_"Automatically adapt visual presentation to environmental conditions, user activity, and system state while maintaining design consistency and accessibility standards."_
 
-**"Automatically adapts visual presentation to circadian rhythms and ambient conditions while preserving design integrity across all interface elements."**
+## 1. Core Architecture
 
-## Time-Based Profile Matrix
-
-| Profile            | Time Range  | Color Temp | Lighting Characteristics | Suggested Activities       |
-| ------------------ | ----------- | ---------- | ------------------------ | -------------------------- |
-| `daybreak-soft`    | 06:00–10:00 | 4500K      | Warm morning light       | Waking up, light work      |
-| `daylight-neutral` | 10:00–18:00 | 6500K      | Standard daylight        | Focused work, productivity |
-| `dusk-dimmed`      | 18:00–22:00 | 3500K      | Reduced evening glow     | Relaxation, media viewing  |
-| `midnight-dark`    | 22:00–06:00 | 2400K      | Sleep-friendly tones     | Night use, low stimulation |
-
-## Multi-Factor Adaptation System
-
-### 1. Environmental Integration
+### Theme State Structure
 
 ```rust
-pub struct AmbientConditions {
-    pub lux_level: f32,       // Ambient light intensity
-    pub color_temp: Option<u16>, // Measured ambient color temp
-    pub weather: WeatherCondition,
-    pub location: GeoCoordinates,
+#[derive(State)]
+pub struct ThemeState {
+    pub base_profile: ThemeProfile,
+    pub adjustments: Vec<ThemeAdjustment>,
+    pub constraints: ThemeConstraints,
+    #[observed]
+    pub current: ActiveTheme,
 }
 ```
 
-### 2. Adaptive Profile Selection
+### Profile Selection System
 
 ```rust
 fn select_profile(state: &SystemState) -> ThemeProfile {
-    let base_profile = match state.time.hour() {
+    let base = match state.time.hour() {
         6..=9 => Profile::DaybreakSoft,
         10..=17 => Profile::DaylightNeutral,
         18..=21 => Profile::DuskDimmed,
         _ => Profile::MidnightDark,
     };
 
-    base_profile
-        .adjust_for_ambient(state.ambient)
-        .adjust_for_activity(state.activity)
-        .apply_user_prefs(state.user_settings)
+    base.apply_ambient(state.ambient)
+        .apply_activity(state.activity)
+        .apply_prefs(state.preferences)
 }
 ```
 
-## Intelligent Adjustments
+## 2. Environmental Adaptation
 
-### 1. Ambient Light Compensation
+### Sensor Integration
+
+```mermaid
+graph TB
+    A[Light Sensor] --> B[Theme Engine]
+    C[Clock] --> B
+    D[Power Manager] --> B
+    E[Activity Monitor] --> B
+    B --> F[Renderer]
+```
+
+### Shader Adjustments
 
 ```glsl
-// Fragment shader applying dynamic adjustments
 uniform float uAmbientLux;
+uniform float uColorTemp;
 
-vec3 adapt_to_environment(vec3 color) {
-    float adaptation = clamp(uAmbientLux / 1000.0, 0.5, 1.5);
-    return color * adaptation;
+vec3 adapt_theme(vec3 base_color) {
+    float adapt_factor = clamp(uAmbientLux/10000.0, 0.7, 1.3);
+    vec3 temp_adjusted = apply_temp(base_color, uColorTemp);
+    return temp_adjusted * adapt_factor;
 }
 ```
 
-### 2. Activity-Based Modifications
+## 3. Profile Definitions
+
+### Built-in Profiles
+
+| Profile            | Color Temp | Brightness | Use Case             |
+| ------------------ | ---------- | ---------- | -------------------- |
+| `daylight-neutral` | 6500K      | 100%       | Daytime work         |
+| `dusk-dimmed`      | 3500K      | 85%        | Evening relaxation   |
+| `midnight-dark`    | 2400K      | 70%        | Low-light conditions |
+| `accessibility`    | 5000K      | 120%       | High contrast needs  |
+
+## 4. User Configuration
+
+### Preference File Format
+
+```ron
+ThemePreferences (
+    base_profiles: {
+        "work": (temp: 5500, contrast: 1.1),
+        "media": (temp: 3400, brightness: 0.8)
+    },
+    rules: [
+        (condition: AfterSunset, action: ApplyProfile("dusk-dimmed")),
+        (condition: BatteryLow, action: ReduceAnimations)
+    ]
+)
+```
+
+### DBus API Endpoints
+
+```xml
+<interface name="org.desktop.ThemeEngine">
+    <method name="SetProfile">
+        <arg name="profile" type="s" direction="in"/>
+    </method>
+    <signal name="ThemeChanged">
+        <arg name="new_theme" type="s"/>
+    </signal>
+</interface>
+```
+
+## 5. System Integration
+
+### Power Awareness
 
 ```rust
-enum UserActivity {
-    FocusWork,
-    CreativeWork,
-    MediaConsumption,
-    NightRest,
-}
-
-impl ThemeProfile {
-    fn for_activity(activity: UserActivity) -> Self {
-        match activity {
-            UserActivity::FocusWork => self.with_contrast(1.2),
-            UserActivity::MediaConsumption => self.with_dimming(0.8),
-            // ...
+impl ThemeState {
+    fn handle_power_change(&mut self, power: PowerState) {
+        match power {
+            PowerState::Battery => self.set_power_saving(true),
+            PowerState::LowPower => self.reduce_animations(),
+            _ => self.set_power_saving(false),
         }
     }
 }
 ```
 
-## Configuration Interface
+### Card System Integration
 
-### 1. User Preferences
-
-```ron
-// ~/.config/ayni/theme_prefs.ron
-ThemePreferences (
-    base_profiles: {
-        "daybreak-soft": (temp: 4500, min_lux: 50),
-        "daylight-neutral": (temp: 6500, min_lux: 100),
-    },
-    overrides: {
-        "meeting_mode": (temp_adjust: -500, contrast: 1.1),
-        "reading_night": (max_temp: 3000, brightness: 0.7)
-    }
-)
-```
-
-### 2. Automatic Transition Settings
+[Related: Everything is a Card](../principles/everything-is-a-card.md)
 
 ```rust
-pub struct TransitionSettings {
-    pub duration: Duration,
-    pub curve: AnimationCurve,
-    pub light_adaptive: bool, // Slower transitions in dark environments
-    pub activity_paused: bool, // Pause during fullscreen apps
+struct CardTheme {
+    base: ThemeProfile,
+    overrides: HashMap<CardType, ThemeAdjustments>,
 }
 ```
 
-## System Integration
+## Advantages
 
-### 1. Hardware Sensors
+1. **Physiological Alignment**:
 
-```mermaid
-graph LR
-    A[Ambient Light Sensor] --> B[Profile Selector]
-    C[Time Service] --> B
-    D[Activity Monitor] --> B
-    B --> E[Theme Renderer]
-```
+   - Circadian rhythm support
+   - Reduced eye strain
 
-### 2. Power Management
+2. **Context Awareness**:
 
-```rust
-fn power_aware_adjustment(profile: ThemeProfile, power: PowerState) -> ThemeProfile {
-    match power {
-        PowerState::Battery => profile.with_energy_saving(),
-        PowerState::LowPower => profile.with_reduced_animations(),
-        _ => profile,
-    }
-}
-```
+   ```rust
+   match activity {
+       Activity::Reading => profile.with_contrast(1.2),
+       Activity::Media => profile.with_dimming(0.8),
+       _ => profile
+   }
+   ```
 
-## Developer Tools
+3. **Performance**:
+   - Single shader for all adjustments
+   - Hardware-accelerated transitions
 
-### 1. Simulation Mode
+## Cross-References
 
-```bash
-theme-simulator \
-    --time 19:30 \
-    --lux 200 \
-    --activity media \
-    --output debug.png
-```
+- [Color Palettes](../theming/color-palettes.md)
+- [Night Light Rules](../theming/night-light-rules.md)
+- [Declarative Shell](../principles/declarative-shell.md)
 
-### 2. Validation Suite
+## Roadmap
 
-```rust
-#[test]
-fn test_profile_transitions() {
-    let morning = Profile::DaybreakSoft;
-    let day = Profile::DaylightNeutral;
+1. **Core Features**:
 
-    assert_eq!(
-        morning.transition_to(day).duration,
-        STANDARD_TRANSITION
-    );
-}
-```
+   - Complete sensor integration
+   - Animation system
 
-This system delivers:
+2. **Optimizations**:
 
-1. **Biologically-aligned** default behaviors
-2. **Context-aware** automatic adjustments
-3. **Non-disruptive** transitions between states
-4. **User-overridable** at every level
-5. **Hardware-optimized** performance
+   - GPU palette management
+   - Predictive adjustments
 
-The engine maintains visual consistency by:
+3. **Tooling**:
+   - Theme debugger
+   - Profile simulator
 
-- Applying all adjustments through centralized shaders
-- Enforcing palette constraints during transitions
-- Providing fallback states for missing sensor data
-- Maintaining accessibility standards across all profiles
+This theming system provides automatic, context-aware visual adaptation while maintaining full user control and system-wide consistency.

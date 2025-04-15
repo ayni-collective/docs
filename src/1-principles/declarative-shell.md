@@ -1,71 +1,51 @@
-# Rust-Based Declarative Shell Architecture for Linux Desktop Environments
+# Declarative Shell Architecture
 
-## Core Principle
+**Core Principle**:  
+_"The desktop interface is defined through reactive state transformations and declarative rules, enabling deterministic rendering and simplified maintenance."_
 
-**"The desktop interface is defined through reactive state transformations and declarative rules, enabling deterministic rendering and simplified maintenance."**
+## 1. Core Architecture
 
-## Implementation Strategy
-
-### 1. Framework Integration
-
-- **Primary Choices**:
-  - **Iced** for widget-based UIs with WGpu backend
-  - **Relm4** for GTK-inspired patterns with Wayland support
-  - **Custom Composition** using Smithay for low-level control
+### State Management System
 
 ```rust
-// Hybrid architecture example
-struct DesktopShell {
-    iced_application: iced::Application<ShellState>,
-    wayland_compositor: Arc<Mutex<SmithayCompositor>>,
-    wasm_runtime: WasmComponentSystem,
+#[derive(StateTree)]
+pub struct ShellState {
+    #[state(global)]
+    pub theme: ThemeState,
+
+    #[state(session)]
+    pub workspaces: Vec<Workspace>,
+
+    #[state(ephemeral)]
+    pub input_focus: Option<WindowId>,
 }
 ```
 
-### 2. State Management System
-
-- **Hierarchical State Tree**:
-
-  ```rust
-  #[derive(StateTree)]
-  struct ShellState {
-      #[state(global)]
-      theme: ThemeState,
-
-      #[state(session)]
-      workspaces: Vec<Workspace>,
-
-      #[state(ephemeral)]
-      input_focus: Option<WindowId>,
-  }
-  ```
-
-- **Reactive Updates**:
-  ```rust
-  state.observe(|changes| {
-      compositor.update_surfaces(changes);
-      iced_app.request_redraw();
-  });
-  ```
-
-## Wayland Integration
-
-### 1. Protocol Support
+### Reactive Update System
 
 ```rust
-// Declarative window management
-fn create_window(state: &WindowState) -> WaylandSurface {
-    xdg_surface()
-        .title(state.title)
-        .size(state.preferred_size)
-        .decorations(match state.decoration_mode {
-            DecorationMode::Server => server_side_decorations(),
-            DecorationMode::Client => client_side_decorations(),
-        })
-}
+state.observe(|changes| {
+    compositor.update_surfaces(changes);
+    iced_app.request_redraw();
+});
 ```
 
-### 2. Performance Optimization
+## 2. Wayland Integration
+
+### Protocol Support
+
+```rust
+// Declarative window definition
+xdg_surface()
+    .title(state.title)
+    .size(state.preferred_size)
+    .decorations(match state.decoration_mode {
+        DecorationMode::Server => server_side_decorations(),
+        DecorationMode::Client => client_side_decorations(),
+    })
+```
+
+### Performance Pipeline
 
 ```mermaid
 graph LR
@@ -75,101 +55,63 @@ graph LR
     D --> E[Wayland Commit]
 ```
 
-## WASM Component System
+## 3. Component System
 
-### 1. Secure Plugin Architecture
+### Card Integration
+
+[Related: Everything is a Card](./everything-is-a-card.md)
 
 ```rust
-struct WasmWidget {
-    instance: wasmtime::Instance,
-    memory: WasmMemory,
-    render_fn: wasmtime::Func,
-    permissions: WidgetPermissions,
-}
-
-impl WasmWidget {
-    fn render(&self, state: &[u8]) -> Result<Texture> {
-        // Execute in isolated sandbox
-        let result = self.render_fn.call(state)?;
-        // Convert to GPU texture
-    }
+struct CardComponent {
+    id: Uuid,
+    content: CardContent,
+    state: ComponentState,
+    #[serde(skip)]
+    renderer: CardRenderer,
 }
 ```
 
-### 2. Development Toolchain
+## 4. Framework Integration
 
-```bash
-# Build WASM components
-cargo build --target wasm32-wasi --features wasm
-
-# Hot reload during development
-cargo watch -x "run -- --hot-reload ./widgets/"
-```
-
-## Advanced Features
-
-### 1. Adaptive Theme Engine
+| Framework   | Purpose   | Integration Point  |
+| ----------- | --------- | ------------------ |
+| **Iced**    | Widget UI | Main view layer    |
+| **Smithay** | Wayland   | Compositor backend |
+| **Tokio**   | Async     | Event system       |
 
 ```rust
-fn resolve_theme(state: &GlobalState) -> Theme {
-    base_theme()
-        .with(time_based_adjustment(state.time))
-        .with(power_profile_adjustment(state.power))
-        .with(accessibility_settings(state.a11y))
+struct ShellFramework {
+    iced: iced::Application,
+    wayland: Arc<Mutex<SmithayCompositor>>,
+    runtime: tokio::runtime::Runtime,
 }
 ```
 
-### 2. Declarative Window Management
+## 5. System Services
+
+### DBus Integration
 
 ```rust
-// Tiling layout definition
-fn workspace_layout(state: &WorkspaceState) -> impl Layout {
-    match state.mode {
-        LayoutMode::Tiling => TilingLayout::new()
-            .main_area(0.6)
-            .secondary(0.4),
-        LayoutMode::Floating => FloatingLayout::new()
-            .with_constraints(state.window_rules),
-    }
-}
-```
-
-## System Integration
-
-### 1. Linux Service Connectivity
-
-```rust
-// DBus-powered state synchronization
 dbus_conn.add_match(
     MatchRule::new()
         .interface("org.freedesktop.portal.Settings")
         .member("SettingChanged")
 )?;
-
-tokio::spawn(async move {
-    while let Some(msg) = dbus_receiver.recv().await {
-        handle_system_change(msg);
-    }
-});
 ```
 
-### 2. Security Model
+### Security Model
 
 ```ron
-// Permission manifest for WASM components
-wasm_permissions {
+sandbox_permissions {
     filesystem: "read-only:/usr/share/themes",
     network: "none",
     gpu: "limited:no-shaders",
 }
 ```
 
-## Key Advantages
+## Advantages Over Traditional Shells
 
 1. **Maintainability**:
-
-   - UI defined as state transformations
-   - Clear separation between logic and presentation
 
    ```rust
    // Before (imperative)
@@ -181,40 +123,34 @@ wasm_permissions {
 
 2. **Performance**:
 
-   - Parallel-friendly architecture
-   - Automatic batching of Wayland commits
-   - Isolated rendering of WASM components
+   - Parallel state updates
+   - Batched Wayland commits
+   - Isolated component rendering
 
-3. **Extensibility**:
-   - Safe plugin system via WASM sandboxing
-   - Hot-reloadable components
-   ```rust
-   fn reload_component(path: &Path) -> Result<()> {
-       let new_widget = WasmWidget::compile(path)?;
-       widget_registry.replace(path, new_widget);
-       request_redraw();
-   }
-   ```
+3. **Consistency**:
+   - Unified theming through state
+   - Deterministic rendering
 
-## Development Roadmap
+## Cross-References
 
-1. **Core Architecture**:
+- [Wayland Integration](../architecture/wayland-integration.md)
+- [Adaptive Theming](../principles/adaptive-theming.md)
+- [Rust API](../api/rust-api.md)
 
-   - Implement state management system
-   - Basic Wayland compositor integration
+## Roadmap
 
-2. **Component System**:
+1. **Core Features**:
 
-   - WASM runtime integration
-   - Permission management layer
+   - State persistence
+   - Multi-monitor support
 
-3. **Optimization**:
+2. **Optimizations**:
 
-   - Parallel rendering pipeline
-   - GPU acceleration for all components
+   - GPU-accelerated compositing
+   - Damage tracking
 
-4. **Ecosystem**:
-   - Developer tools for component creation
-   - Documentation and examples
+3. **Ecosystem**:
+   - Developer tools
+   - Documentation suite
 
-This architecture provides a solid foundation for building a modern Linux desktop environment that combines Rust's performance and safety with the flexibility of declarative UIs and secure extensibility through WASM.
+This architecture combines Rust's safety guarantees with declarative UI patterns for a maintainable and performant shell implementation.

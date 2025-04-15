@@ -1,33 +1,39 @@
-# **Principle 4: Terminal-First Card Ecosystem**
+# **Terminal-First Card System**
 
-**"Every terminal interaction and shell construct exists as a first-class card entity, blending modern shell capabilities with unified visual management."**
+**Core Principle**:  
+_"Treat terminal sessions as first-class card citizens, blending shell productivity with visual card management while maintaining full CLI compatibility."_
 
 ---
 
-## **Core Architecture for Fish/Warp-Style Shells**
+## **1. Core Architecture**
 
-### **1. Shell Integration Layer**
+### **Terminal Card Type**
 
-#### **Card Lifecycle in Shell**
-
-```fish
-# Launch process as interactive card
-function launch_card -d "Create card from command"
-    desk card create --cmd="$argv" \
-        --title=(string join " " $argv) \
-        --behavior="auto-close-on-exit"
-end
-
-# Usage: launch_card htop → Creates resizable system monitor card
+```rust
+#[derive(State)]
+pub struct TerminalCard {
+    pub pid: u32,                   // Process ID
+    pub pty: PtyHandle,             // Warp-style PTY
+    pub title: String,              // Dynamic title
+    pub working_dir: PathBuf,       // Current directory
+    pub shell: ShellType,           // Fish/Zsh/Bash
+    #[observed]
+    pub state: TerminalState,       // Running/Finished
+    pub behavior: TerminalBehavior, // Auto-close, Persistent
+}
 ```
 
-#### **Prompt-Driven Card Spawn**
+### **Shell Integration (Fish Example)**
 
 ```fish
 function fish_prompt
-    # Detect multi-line commands and offer card conversion
-    if test (count (string split \n (commandline))) -gt 3
-        echo "[Convert to card? Ctrl+Alt+C]"
+    # Auto-register terminal as card
+    if not desk card exists term-$fish_pid
+        desk card create term-$fish_pid \
+            --type=terminal \
+            --cmd="fish" \
+            --cwd=(pwd) \
+            --title="Terminal"
     end
     # ... normal prompt ...
 end
@@ -35,159 +41,155 @@ end
 
 ---
 
-### **2. Warp-Like Features as Cards**
-
-| Warp Feature       | Card Implementation               | Benefit                        |
-| ------------------ | --------------------------------- | ------------------------------ |
-| **Blocks**         | Ephemeral cards with input/output | Persistent debug context       |
-| **Workflows**      | Card groups with shared state     | Reusable terminal environments |
-| **AI Suggestions** | Overlay suggestion cards          | Non-intrusive help             |
-
-**Example AI Card Integration**:
-
-```rust
-struct AICard {
-    query: String,
-    response: Arc<Mutex<String>>,
-    position: CardPosition, // Follows cursor
-    mode: AICardMode, // Suggestion/Explain/Debug
-}
-```
-
----
-
-## **3. Fish Shell-Specific Optimizations**
-
-### **Interactive Card Completion**
-
-```fish
-complete -c desk -a "(desk card list --format=fish)" -n "__fish_seen_subcommand_from focus"
-```
-
-### **Event-Driven Card Updates**
-
-```fish
-function __update_network_card -d "Update network stats card"
-    set -l stats (networkctl --json=short)
-    desk card update network-stats --content="$stats"
-end
-
-bind \en '__update_network_card; commandline -f repaint'
-```
-
----
-
-## **Unified Card Behaviors**
+## **2. Key Features**
 
 ### **Terminal Card Types**
 
-| Type           | Characteristics                 | Example Use                  |
-| -------------- | ------------------------------- | ---------------------------- |
-| **Ephemeral**  | Auto-close on exit              | `ls`, `grep` results         |
-| **Persistent** | Manual close required           | `htop`, `journalctl -f`      |
-| **Pinned**     | Always visible                  | System monitors              |
-| **Overlay**    | Semi-transparent, click-through | AI suggestions, hotkeys help |
+| Type           | Characteristics            | Example Use          |
+| -------------- | -------------------------- | -------------------- |
+| **Ephemeral**  | Auto-close on exit         | `grep`, `ls` results |
+| **Persistent** | Manual close required      | `htop`, `journalctl` |
+| **Pinned**     | Always visible in sidebar  | System monitors      |
+| **Overlay**    | Click-through transparency | Documentation viewer |
 
----
-
-## **Technical Implementation**
-
-### **1. PTY-to-Card Pipeline**
-
-```mermaid
-graph TB
-    A[Fish Shell] -->|PTY| B[Card Manager]
-    B -->|Wayland| C[Terminal Card]
-    C -->|Input| A
-    B -->|Notifications| D[Status Bar]
-```
-
-### **2. Performance-Critical Path**
+### **Warp-Style Blocks as Cards**
 
 ```rust
-struct TerminalCard {
-    pty: Pty,                      // Warp-style PTY
-    renderer: TerminalRenderer,    // GPU-accelerated
-    input_parser: InputProcessor,  // Fish syntax aware
-    link: CardLink,                // Parent/child cards
+struct CommandBlock {
+    input: String,
+    output: Vec<u8>,
+    exit_code: Option<i32>,
+    card_id: Uuid,
 }
 ```
 
 ---
 
-## **User Experience Flow**
+## **3. Performance-Sensitive Components**
 
-### **1. Debugging Session**
+### **PTY Rendering Pipeline**
 
-```fish
-# Start debugger as persistent card
-launch_card delve debug ./main.go
-
-# In another tab: create linked stack trace card
-desk card create --cmd="ps aux | grep main" --link=debugger
-
-# Both cards share color theme and input focus
+```mermaid
+graph TB
+    A[Shell Process] -->|PTY| B[Terminal Card]
+    B -->|GPU| C[Renderer]
+    C -->|Wayland| D[Compositor]
+    D -->|Input| A
 ```
 
-### **2. Data Analysis Workflow**
+### **Terminal Renderer**
 
-```fish
-# Create card chain
-launch_card jq -R 'split(",")' dataset.csv | launch_card bat -l json
-```
-
-### **3. System Monitoring Dashboard**
-
-```fish
-# Composite card with multiple views
-desk card create --compound \
-    --top="htop" \
-    --right="nvtop" \
-    --bottom="iotop -o"
+```rust
+struct TerminalRenderer {
+    glyph_cache: GpuGlyphCache,
+    damage_regions: Vec<Rect>,
+    parser: VtParser,
+    link_semantics: LinkDetection,
+}
 ```
 
 ---
 
-## **Key Advantages Over Traditional Terminals**
+## **4. Shell-Specific Optimizations**
 
-1. **Visual Organization**
+### **Fish Shell Integration**
 
-   - Group related processes as card stacks
-   - Spatial memory for command history
+```fish
+# Auto-convert long commands to cards
+function __fish_long_command_notify
+    if test (count $argv) -gt 5
+        desk card create --cmd="$argv" --title="Command: $argv[1]"
+    end
+end
+```
 
-2. **Persistent Context**
+### **Zsh/Bash Compatibility**
 
-   - Maintain `curl | jq` pipelines as reusable cards
-   - Never lose `tail -f` outputs between sessions
-
-3. **Enhanced Discoverability**
-   ```fish
-   # See all cards containing Python processes
-   desk card list | grep python
-   ```
+```bash
+# Bash PROMPT_COMMAND equivalent
+trap 'desk card update term-$$ --cwd="$PWD"' DEBUG
+```
 
 ---
 
-## **Implementation Roadmap**
+## **5. Advanced Interactions**
 
-### **Phase 1: Core Integration**
+### **Card-Enhanced Workflows**
 
-1. Fish shell plugin for card management
-2. Basic PTY card renderer
-3. Position-aware overlay system
+```fish
+# Create linked cards for debugging
+launch_card lldb ./target/debug/myapp | \
+    launch_card --linked htop --filter=myapp
+```
 
-### **Phase 2: Advanced Features**
+### **AI Integration**
 
-1. Warp-style block cards with AI integration
-2. Card versioning (git-like history for terminal cards)
-3. Multi-user card sharing
+```rust
+struct AITerminalCard {
+    query: String,
+    response: Arc<Mutex<String>>,
+    position: CardPosition, // Follows cursor
+    mode: AICardMode,      // Explain/Debug/Suggest
+}
+```
+
+---
+
+## **6. System Integration**
+
+### **Process Management**
+
+```rust
+impl TerminalCard {
+    fn terminate(&self) {
+        nix::sys::signal::kill(
+            Pid::from_raw(self.pid),
+            Signal::SIGTERM
+        )?;
+        self.state = TerminalState::Finished;
+    }
+}
+```
+
+### **Resource Monitoring**
+
+```bash
+# Card-resource usage
+desk card stats term-1234 --format=json
+```
+
+---
+
+## **Cross-References**
+
+- [Everything is a Card](../principles/everything-is-a-card.md)
+- [Declarative Shell](../principles/declarative-shell.md)
+- [Rust API](../api/rust-api.md)
+
+---
+
+## **Roadmap**
+
+### **Phase 1: Core**
+
+- Basic PTY card rendering
+- Fish/Zsh integration hooks
+
+### **Phase 2: Advanced**
+
+- Warp-style block cards
+- Neural command prediction
 
 ### **Phase 3: Optimization**
 
-1. Zero-copy PTY rendering
-2. Neural network for card auto-arrangement
-3. Hardware-accelerated compositing
+- Zero-copy PTY rendering
+- Hardware-accelerated text
 
 ---
 
-This approach transforms the terminal into a **card-powered** workspace while preserving the speed and flexibility of modern shells. Would you like to explore the Fish plugin implementation or Warp-style block cards in more detail?
+This system combines the efficiency of terminal workflows with the visual organization of cards, delivering:
+
+1. **Context Preservation**: Never lose running processes
+2. **Visual Debugging**: Linked monitoring cards
+3. **Natural Discovery**: `desk card list | grep python`
+4. **Performance**: GPU-accelerated rendering

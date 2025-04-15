@@ -1,134 +1,198 @@
-# **Principle 5: Instant Context Switching with Session Freezing**
+# **Instant Context Switching System**
 
-**"The desktop environment manages self-contained workspaces that preserve complete application states, allowing instantaneous switching between different development contexts while optimizing resource usage."**
+**Core Principle**:  
+_"Preserve complete workspace states as immutable snapshots, enabling instantaneous switching between development contexts with zero cognitive overhead."_
 
-## Core Implementation
+---
 
-### 1. Session Definition and Management
+## **1. Core Architecture**
+
+### **Session State Definition**
 
 ```rust
-struct DesktopSession {
-    id: Uuid,
-    name: String,                 // "web-dev", "mobile-dev"
-    state: SessionState,          // Active/Frozen/Hibernated
-    components: SessionComponents, // Apps, terminals, cards
-    layout: SessionLayout,        // Window/card positions
-    resource_profile: ResourceLimits,
-}
-
-enum SessionState {
-    Active,
-    Frozen(FrozenState),  // In-memory suspension
-    Hibernated(PathBuf),  // Disk storage
+#[derive(Serialize, Deserialize)]
+pub struct WorkspaceSnapshot {
+    pub id: Uuid,
+    pub name: String,                  // "web-dev", "data-science"
+    pub timestamp: DateTime<Utc>,
+    pub cards: Vec<CardSnapshot>,      // Serialized card states
+    pub layout: LayoutTopology,
+    pub environment: RuntimeState,     // Env vars, shell history
+    pub resource_footprint: ResourceProfile,
 }
 ```
 
-### 2. Session Control CLI
-
-```bash
-# Save current workspace as session
-sessionctl save web-dev --include="vscode,firefox,mysql"
-
-# Switch sessions (auto-freezes others)
-sessionctl switch mobile-dev --freeze-mode=light
-
-# List available sessions
-sessionctl list
-# Output:
-# web-dev (frozen) - 3 apps, 2 terminals
-# mobile-dev (active) - 2 apps, 1 emulator
-# backend (hibernated) - 4 services
-```
-
-## Key Features
-
-### 1. Granular State Preservation
-
-- **Application States**:
-
-  - Open files and editor tabs
-  - Terminal history and running processes
-  - Card positions and layouts
-
-- **System Services**:
-  ```bash
-  # Session hooks for database services
-  hooks:
-    pre-activate: "docker start postgres redis"
-    post-freeze: "docker stop postgres redis"
-  ```
-
-### 2. Performance-Optimized Freezing
-
-| Freeze Level    | Memory Usage | Restore Time | Ideal For              |
-| --------------- | ------------ | ------------ | ---------------------- |
-| **Light**       | 10-20%       | <100ms       | Frequent switching     |
-| **Deep**        | 1-5%         | 300-500ms    | Background sessions    |
-| **Hibernation** | 0%           | 2-5s         | Long-term preservation |
-
-### 3. Visual Session Management
+### **State Management**
 
 ```mermaid
-graph TB
-    A[Active Session] -->|Manual Trigger| B{Freeze Mode?}
-    B -->|Light| C[Keep in RAM]
-    B -->|Deep| D[Compress RAM]
-    B -->|Hibernate| E[Write to Disk]
-    C --> F[Quick Resume]
-    D --> F
-    E --> G[Slow Resume]
+graph LR
+    A[Active Session] -->|Freeze| B[Memory/Storage]
+    B -->|Restore| C[Identical State]
+    D[User Request] --> E{Load Method}
+    E -->|Hot| F[RAM Cache]
+    E -->|Cold| G[Disk Storage]
 ```
 
-## Workflow Integration
+---
 
-### Developer Workflow Example
+## **2. Key Features**
 
-1. **Morning Setup**:
+### **Session Control Interface**
 
-   ```bash
-   sessionctl resume web-dev --layout=ultrawide
-   ```
+```bash
+# Save current context
+ctx save web-dev --include="vscode,postgres,terminals"
 
-2. **Context Switch**:
+# Switch contexts
+ctx switch data-analysis --strategy=warm
 
-   ```bash
-   sessionctl switch mobile-dev --freeze=light
-   # Instantly switches to Flutter dev environment
-   ```
+# List available contexts
+ctx list
+# Output:
+# web-dev (active) - 3 apps, 2 terminals
+# data-analysis (frozen) - Jupyter, DB console
+# design (hibernated) - Figma, Browser
+```
 
-3. **End of Day**:
-   ```bash
-   sessionctl hibernate-all --compress
-   # Saves all sessions to disk
-   ```
+### **Recovery Guarantees**
 
-## Technical Advantages
+```rust
+impl WorkspaceSnapshot {
+    fn recover(&self) -> Result<()> {
+        self.validate_checksum()?;
+        self.restore_cards()?;  // Ordered restoration
+        self.reestablish_links()?;  // Card relationships
+        Ok(())
+    }
+}
+```
 
-1. **CRIU Integration**:
+---
 
-   ```rust
-   fn freeze_process(pid: Pid) -> Result<FrozenImage> {
-       criu::dump(pid, "/tmp/sessions/")?;
-       Ok(FrozenImage::new(pid))
-   }
-   ```
+## **3. Performance Tiers**
 
-2. **Card System Integration**:
+| Strategy | Storage Location | Restore Time | RAM Usage | Best For           |
+| -------- | ---------------- | ------------ | --------- | ------------------ |
+| **Hot**  | RAM              | <50ms        | 100%      | Frequent switching |
+| **Warm** | ZRAM             | 200-300ms    | 30%       | Balanced use       |
+| **Cold** | NVMe SSD         | 1-2s         | 0%        | Archival           |
 
-   - Each card remembers its parent session
-   - Automatic visual dimming for frozen-session cards
+---
 
-3. **Resource Management**:
-   ```bash
-   # Set per-session resource limits
-   sessionctl limit web-dev --memory=8G --cpu=4
-   ```
+## **4. Technical Implementation**
 
-This implementation delivers Zellij-like session management while:
+### **CRIU Integration**
 
-- Preserving your card-based UI paradigm
-- Adding granular process control
-- Maintaining system-wide performance
-- Supporting your specific workflow examples (web, backend, mobile contexts)
+```rust
+fn freeze_process_tree(pid: Pid) -> Result<Snapshot> {
+    criu::dump(
+        pid,
+        DumpOptions::new()
+            .with_tcp_established()
+            .with_file_locks()
+    )
+}
+```
 
-Would you like me to elaborate on any particular aspect, such as the freezing mechanism or session visualization?
+### **Card System Integration**
+
+[Related: Everything is a Card](../principles/everything-is-a-card.md)
+
+```rust
+struct CardSnapshot {
+    id: Uuid,
+    content_hash: String,
+    spatial_state: CardGeometry,
+    runtime_state: serde_json::Value,
+}
+```
+
+---
+
+## **5. Workflow Examples**
+
+### **Development Session**
+
+```bash
+# Morning setup
+ctx resume web-dev --layout=dual-monitor
+
+# Data analysis interlude
+ctx switch data-analysis --strategy=hot
+
+# Evening cleanup
+ctx hibernate --compress
+```
+
+### **Emergency Recovery**
+
+```bash
+# Restore last good state after crash
+ctx recover web-dev --from=autosave
+```
+
+---
+
+## **6. System Integration**
+
+### **Resource Governance**
+
+```ron
+// ~/.config/desk/contexts.ron
+resource_limits: {
+    "web-dev": (memory: "8G", cpu: 4),
+    "data-analysis": (memory: "16G", gpu: true)
+}
+```
+
+### **Version Control**
+
+```bash
+# Diff context states
+ctx diff web-dev@today web-dev@yesterday
+```
+
+---
+
+## **Cross-References**
+
+- [Declarative Shell](../principles/declarative-shell.md)
+- [Terminal-First](../principles/terminal-first.md)
+- [Window Manager](../components/window-manager.md)
+
+---
+
+## **Roadmap**
+
+### **Phase 1: Core**
+
+- Process freezing/restoration
+- Basic card state serialization
+
+### **Phase 2: Advanced**
+
+- Differential snapshots
+- Cloud sync integration
+
+### **Phase 3: Optimization**
+
+- Lazy state loading
+- Hardware-accelerated serialization
+
+---
+
+This system delivers:
+
+1. **Zero-Overhead Switching**: <100ms context changes
+2. **Failure Resilience**: Automatic crash recovery
+3. **Resource Efficiency**: Tiered storage options
+4. **Workflow Continuity**: Precise environment reproduction
+
+```rust
+// Example: Automated context triggers
+match system_state.time.hour() {
+    9..=12 => ctx.activate("development"),
+    13..=14 => ctx.activate("meetings"),
+    _ => ctx.activate("admin"),
+}
+```
