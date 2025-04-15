@@ -7,6 +7,8 @@
 - [Declarative Shell](1-principles/declarative-shell.md)
 - [Adaptive Theming](1-principles/adaptive-theming.md)
 - [Everything is a Card](1-principles/everything-is-a-card.md)
+- [Terminal-First Desktop](1-principles/terminal-first-desktop.md)
+- [Instant Context Switching](1-principles/instant-context-switching.md)
 
 ## 2. Architecture
 

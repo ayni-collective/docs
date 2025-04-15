@@ -1,138 +1,167 @@
 # **Principle 3: The "Everything is a Card" Paradigm**
 
-**"The interface is built from self-contained cards—autonomous, modular units that represent apps, widgets, or content—organized in flexible containers with declarative rules."**
+**"A unified interface model where all components—apps, widgets, and content—exist as autonomous, interactive cards following declarative rules and physical interaction metaphors."**
 
 ---
 
-## **1. Core Philosophy: Cards as Atomic Units**
+## **1. Core Architecture**
 
-Every UI element is a **card** with:
-
-- **Content** (apps, widgets, media, notifications).
-- **Behavior** (draggable, resizable, stackable).
-- **State** (active, minimized, focused).
-- **Adaptive theming** (system-wide + per-card customization).
-
-### **Rust Implementation (Base Card):**
+### **Card Anatomy (Rust Implementation)**
 
 ```rust
 #[derive(State)]
 pub struct Card {
     pub id: Uuid,
-    pub content: CardContent,  // App, widget, media, etc.
-    pub behavior: CardBehavior,
+    pub content: CardContent,  // Enum: App, Media, Widget, Notification
+    pub behavior: CardBehavior, // Drag, Flip, Stack permissions
     #[observed]
-    pub state: CardState,      // Focus, minimized, etc.
+    pub state: CardState,      // Focused/Minimized/Active
     #[observed]
     pub style: CardStyle,      // Inherits system theme + overrides
 }
 ```
 
+### **Key Properties**
+
+- **Atomic**: Each card contains its own logic and presentation
+- **Context-Aware**: Adapts behavior based on container/location
+- **Physical Metaphors**: Flip, stack, shuffle interactions
+
 ---
 
-## **2. Card Containers (Decks & Kanban Boards)**
+## **2. Container System (Decks)**
 
-**Decks** define how cards are grouped and laid out:
-
-| Container Type | Purpose                         | Example Use Case                  |
-| -------------- | ------------------------------- | --------------------------------- |
-| **Stack**      | Overlapping cards (traditional) | Window management                 |
-| **Grid**       | Tiled layout (minimal tiling)   | Workspace organization            |
-| **Flow**       | Horizontal/vertical scrolling   | App docks or notifications        |
-| **Kanban**     | Trello/Notion-style boards      | Task management, project tracking |
-
-### **Kanban Board Implementation**
+| Type      | Behavior              | Use Case                | Kanban Equivalent |
+| --------- | --------------------- | ----------------------- | ----------------- |
+| **Stack** | Manual Z-ordering     | Window management       | N/A               |
+| **Grid**  | Automated tiling      | Workspaces              | Swimlanes         |
+| **Flow**  | Directional scrolling | App docks/notifications | Backlog           |
+| **Board** | Column-based grouping | Task management         | Kanban Board      |
 
 ```rust
 struct KanbanBoard {
-    lanes: Vec<Lane>,  // e.g., "To Do", "In Progress", "Done"
+    lanes: HashMap<LaneId, Lane>,  // "To Do", "In Progress", "Done"
+    #[observed]
     cards: Vec<Card>,
-    sorting_rules: LaneRules,  // Auto-sort by priority/tags
-}
-
-impl KanbanBoard {
-    fn update_card_position(&mut self, card_id: Uuid, new_lane: LaneId) {
-        // Move card between lanes with animation
-    }
+    sorting: LaneRules,  // Auto-sort by priority/tags/deadline
 }
 ```
 
 ---
 
-## **3. Card Interaction Philosophy**
+## **3. Physical Interaction Model**
 
-- **No traditional "windows"**—only cards in decks.
-- **Unified gestures**: All cards support:
-  - **Drag/drop** (between decks or lanes).
-  - **Flip** (show backside for settings/details).
-  - **Stack** (group related cards temporarily).
-  - **Shuffle** (rearrange dynamically).
+### **Card Gestures**
 
-### **Example: Physical Card Metaphors**
+| Physical Action | Digital Implementation          | UX Purpose               |
+| --------------- | ------------------------------- | ------------------------ |
+| **Deal**        | Distribute cards across decks   | Workspace initialization |
+| **Shuffle**     | Algorithmic reorganization      | Context switching        |
+| **Flip**        | Show back panel (settings/logs) | Quick access             |
+| **Stack**       | Temporary group creation        | Task batching            |
+| **Fan**         | Peek at overlapping cards       | Content preview          |
 
-| Gesture     | Digital Adaptation                              |
-| ----------- | ----------------------------------------------- |
-| **Deal**    | Distribute cards across workspaces              |
-| **Shuffle** | Randomize card layouts (e.g., for multitasking) |
-| **Fan**     | Peek at stacked cards                           |
+### **Wayland Protocol Extension**
+
+```xml
+<interface name="zcard_gesture_v1">
+    <method name="FlipCard">
+        <arg name="card_id" type="string"/>
+    </method>
+    <event name="StackRequest">
+        <arg name="cards" type="array" content_type="string"/>
+    </event>
+</interface>
+```
 
 ---
 
-## **4. Declarative Layout Rules**
+## **4. Adaptive Layout Engine**
 
-Cards self-organize based on:
-
-- **Container type** (Stack/Grid/Kanban).
-- **Contextual relationships** (auto-grouping by project/tag).
-- **User focus** (priority scaling for active cards).
+### **Declarative Rules**
 
 ```rust
-// Declarative layout example for a Kanban lane
-fn render_lane(lane: &Lane) -> impl RenderRule {
-    FlowLayout::horizontal()
-        .spacing(16)
-        .children(lane.cards.iter().map(|card| {
-            card.render()
-                .with_behavior(BEHAVIOR_DRAGGABLE)
-                .with_theme(lane.theme)
-        }))
+fn arrange_cards(layout: LayoutType, cards: &[Card]) -> Vec<CardGroup> {
+    match layout {
+        LayoutType::Kanban => group_by_lanes(cards),
+        LayoutType::Grid => {
+            let grid = GridLayout::new()
+                .with_columns(auto_detect_columns())
+                .with_gutter(16);
+            grid.arrange(cards)
+        }
+        // Other layouts...
+    }
 }
 ```
 
+### **Performance Optimization**
+
+- **Partial Updates**: Only reflow affected card groups
+- **GPU-Accelerated**: Shared shaders for common card types
+- **Lazy Loading**: Offscreen cards remain suspended
+
 ---
 
-## **5. Theming & Adaptive Behavior**
+## **5. Theming System Integration**
 
-Cards inherit system themes but can override:
+### **Priority-Based Styling**
 
 ```ron
-// Per-card theming rules
-CardTheme(
-    default: ("daylight-neutral", 6500K),
-    overrides: {
-        "VideoCard": (night_temp: 3500K, dim: 20%),
-        "TaskCard": (priority_color: "#ff3e00")
-    }
+CardThemeProfile(
+    default: ("daylight", 6500K),
+    exceptions: [
+        ("Video", (night: 3500K, brightness: -20%)),
+        ("Critical", (accent: "#ff3e00", blink: 2Hz))
+    ],
+    containers: [
+        ("Kanban", (lane_borders: true)),
+        ("Grid", (drop_shadows: false))
+    ]
 )
 ```
 
+### **State-Aware Appearance**
+
+```glsl
+// Card fragment shader
+uniform int uCardState; // Focused/Minimized/Default
+
+vec4 render_card() {
+    if (uCardState == FOCUSED) {
+        return apply_highlight(rgba);
+    }
+    // Default rendering...
+}
+```
+
 ---
 
-## **6. Why This Works**
+## **6. Advantages Over Traditional Models**
 
-✅ **Unified interaction model**: No distinction between "apps" and "widgets."  
-✅ **Extreme flexibility**: From tiling (Grid) to freeform (Kanban).  
-✅ **Physicality-inspired UX**: Intuitive gestures (flip, stack, shuffle).  
-✅ **Scalable**: Nested cards (e.g., tabs within apps) or decks within decks.
+| Aspect            | Card Paradigm             | Traditional Windows      |
+| ----------------- | ------------------------- | ------------------------ |
+| **Consistency**   | Unified interaction model | Varies by app/widget     |
+| **Flexibility**   | Dynamic reorganization    | Manual window management |
+| **Performance**   | Isolated card rendering   | Global repaints          |
+| **Accessibility** | Predictable gestures      | Inconsistent controls    |
 
 ---
 
-## **Next Steps**
+## **Next Implementation Steps**
 
-Would you like:
+1. **Core Protocols**
 
-1. **Wayland protocol extensions** for card drag/drop?
-2. **Animation examples** (card flipping, lane transitions)?
-3. **Integration with Cosmic-compatible tiling**?
+   - Wayland extensions for card drag/drop
+   - DBus API for deck management
 
-This approach keeps your principles intact while adding Kanban/Trello-like flexibility!
+2. **Animation System**
+
+   - Physics-based card movements
+   - Transition curves for flipping/stacking
+
+3. **Developer Tools**
+   - Card debug overlay
+   - Layout boundary visualizer
+
+Would you like to prioritize any of these areas for deeper technical exploration?
